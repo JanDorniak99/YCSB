@@ -89,6 +89,9 @@ public class CoreWorkload extends Workload {
   public static final String FIELD_COUNT_PROPERTY_DEFAULT = "10";
   
   private List<String> fieldnames;
+  private static HashMap<String, ByteIterator> valuesMap;
+  private static StringBuilder sb;
+  private static ByteIterator dataIterator;
 
   /**
    * The name of the property for the field length distribution. Options are "uniform", "zipfian"
@@ -431,6 +434,14 @@ public class CoreWorkload extends Workload {
     }
     fieldlengthgenerator = CoreWorkload.getFieldLengthGenerator(p);
 
+    sb = new StringBuilder();
+    valuesMap = new HashMap<>();
+
+    for (String fieldkey : fieldnames) {
+      dataIterator = new NoAllocationIterator(fieldlengthgenerator.nextValue().longValue());
+      valuesMap.put(fieldkey, dataIterator);
+    }
+
     recordcount =
         Long.parseLong(p.getProperty(Client.RECORD_COUNT_PROPERTY, Client.DEFAULT_RECORD_COUNT));
     if (recordcount == 0) {
@@ -548,38 +559,14 @@ public class CoreWorkload extends Workload {
    * Builds a value for a randomly chosen field.
    */
   private HashMap<String, ByteIterator> buildSingleValue(String key) {
-    HashMap<String, ByteIterator> value = new HashMap<>();
-
-    String fieldkey = fieldnames.get(fieldchooser.nextValue().intValue());
-    ByteIterator data;
-    if (dataintegrity) {
-      data = new StringByteIterator(buildDeterministicValue(key, fieldkey));
-    } else {
-      // fill with random data
-      data = new RandomByteIterator(fieldlengthgenerator.nextValue().longValue());
-    }
-    value.put(fieldkey, data);
-
-    return value;
+    return valuesMap;
   }
 
   /**
    * Builds values for all fields.
    */
   private HashMap<String, ByteIterator> buildValues(String key) {
-    HashMap<String, ByteIterator> values = new HashMap<>();
-
-    for (String fieldkey : fieldnames) {
-      ByteIterator data;
-      if (dataintegrity) {
-        data = new StringByteIterator(buildDeterministicValue(key, fieldkey));
-      } else {
-        // fill with random data
-        data = new RandomByteIterator(fieldlengthgenerator.nextValue().longValue());
-      }
-      values.put(fieldkey, data);
-    }
-    return values;
+    return valuesMap;
   }
 
   /**
@@ -587,7 +574,9 @@ public class CoreWorkload extends Workload {
    */
   private String buildDeterministicValue(String key, String fieldkey) {
     int size = fieldlengthgenerator.nextValue().intValue();
-    StringBuilder sb = new StringBuilder(size);
+    if (sb.length() > 0) {
+      sb.delete(0, sb.length() - 1);
+    }
     sb.append(key);
     sb.append(':');
     sb.append(fieldkey);
